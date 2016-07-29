@@ -1,0 +1,5 @@
+
+#+BEGIN_SRC sh
+lein cljsbuild once prod
+sensible-browser resources/public/fractals.html
+#+END_SRC
