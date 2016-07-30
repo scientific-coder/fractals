@@ -20,7 +20,7 @@
 (def negative-infinity (.-NEGATIVE_INFINITY js/Number))
 (def epsilon (.-EPSILON js/Number))
 
-;; has to be a macro :is-from should be the newly defined var, not f
+;; would have to be a macro :is-from should be the newly defined var, not f
 ;; (defn add-functional-meta [f]
 ;;   (fn [& args]
 ;;     (with-meta (apply f args)
@@ -75,25 +75,8 @@
     {:is-from scalar-multiply
      :args [k [x y]]}))
 
-
-
-;; TODO macro !!!
-;; (def comp (add-functional-meta comp))
-;; (def juxt (add-functional-meta juxt))
-;; (def apply (add-functional-meta apply))
-
-;; (def add (add-functional-meta add))
-;; (def rotate (add-functional-meta rotate))
-;; (def scalar-multiply (add-functional-meta scalar-multiply))
-
-;; (def mapv (add-functional-meta mapv))
-;; (def merged-juxt (add-functional-meta merged-juxt))
-
-
-
 (defn eltwise_op [op [x0 y0] [x1 y1]]
   [(op x0 x1) (op y0 y1)])
-
 
 (defn barycenter [ps]
   (scalar-multiply (/ 1 (count ps)) (reduce add [0. 0.] ps)))
@@ -111,25 +94,30 @@
 
 (defn sierpinski-params [n]
   (let[step-elt (close-polygon (regular-polygon n))
-      scale-f (my-partial scalar-multiply (/ 1 (dec n)))]
+       make-transform #(my-partial mapv
+                                   (my-partial mapv
+                                               (my-comp (my-partial add %)
+                                                        (my-partial scalar-multiply (/ 1 (dec n))))))]
   (condp = n
     3 [[]
-       [(merged-juxt (for [i [0 1 2]](my-partial mapv (my-partial mapv (my-comp (my-partial add (rotate (+ pi (* i 2 (/ pi 3))) [1. 0.])) scale-f)))))
+       [(merged-juxt (for [i [0 1 2]] (make-transform (rotate (+ pi (* i 2 (/ pi 3))) [1. 0.]))))
         [step-elt]]]
     4 [[]
-       [(merged-juxt (let [d [-1 0 1]](for [dx d
-                                            dy d
-                                            :when (not= 0 dx dy)]
-                                        (my-partial mapv (my-partial mapv (my-comp (my-partial add (scalar-multiply (sqrt 2.) [dx dy])) scale-f))))))
+       [(merged-juxt (let [d [-1 0 1]]
+                       (for [dx d dy d :when (not= 0 dx dy)]
+                         (make-transform (scalar-multiply (sqrt 2.) [dx dy])))))
         [(map (partial rotate (/ pi 4)) step-elt)]]])))
 
 (defn tree-params [angles]
   (let[branch [0 1]
        ratio (/ (+ 1 (sqrt 5.)) 2.)]
     [[]
-     [(merged-juxt (for [a angles](my-partial mapv (my-partial mapv (my-comp (my-partial add branch)
-                                                                    (my-partial scalar-multiply (/ 1 ratio))
-                                                                    (my-partial rotate a))))))
+     [(merged-juxt (for [a angles]
+                     (my-partial mapv
+                                 (my-partial mapv
+                                             (my-comp (my-partial add branch)
+                                                      (my-partial scalar-multiply (/ 1 ratio))
+                                                      (my-partial rotate a))))))
       [[[0. 0] branch]]]]))
 
 (def koch-params [[[[-0.5 0][0.5 0]]]
@@ -137,7 +125,11 @@
                                              [[(/ 1 3) 0] 0]
                                              [(rotate (/ pi 3) [(/ 1 6) 0]) (/ pi -3)]
                                              [(rotate (/ pi -3) [(/ -1 6) 0]) (/ pi 3)]]]
-                                  (my-partial mapv (my-partial mapv (my-comp (my-partial add v) (my-partial rotate a) (my-partial scalar-multiply (/ 1 3)))))))
+                                  (my-partial mapv
+                                              (my-partial mapv
+                                                          (my-comp (my-partial add v)
+                                                                   (my-partial rotate a)
+                                                                   (my-partial scalar-multiply (/ 1 3)))))))
                    []]])
 
 (defn sequence-steps [n step-factor]
@@ -184,13 +176,14 @@
 (defn params-step [s [init-scene [step-fs step-scene]]]
   [init-scene [(stepify s step-fs) step-scene]])
 
-
 (defn fractal-with-steps [params details]
   (let [[init-scene step-params] params
         int-d (int details)
         int-fractal (nth (iterate (partial fractal-step step-params) init-scene) int-d)
         fractional-d (- details int-d)]
-    (if (<= fractional-d epsilon) int-fractal (fractal-step (second (params-step fractional-d params)) int-fractal))))
+    (if (<= fractional-d epsilon)
+      int-fractal
+      (fractal-step (second (params-step fractional-d params)) int-fractal))))
 
 
 (defn bounding-box [ps]
@@ -221,10 +214,11 @@
         draw #(svg/line-strip % )
        display #(->> root
                      (dom/clear!)
-                     (dom/create-dom! (let [[w h] ((juxt :width :height) display-params)
-                                        f (adjust-bounding-box true [[0 h][w 0]] %)]
-                                    (svg/svg display-params (svg/group {:stroke color} (map (comp draw (partial mapv f)) %))))
-                                  root))
+                     (dom/create-dom!
+                      (let [[w h] ((juxt :width :height) display-params)
+                            f (adjust-bounding-box true [[0 h][w 0]] %)]
+                        (svg/svg display-params (svg/group {:stroke color} (map (comp draw (partial mapv f)) %))))
+                      root))
         scene (fractal-with-steps params details)]
    (display scene)))
 
